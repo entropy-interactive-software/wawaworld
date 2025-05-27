@@ -78,7 +78,7 @@ Worldspawn::~Worldspawn() {
 
 void Worldspawn::loadFile(const char* _file) {
   std::scoped_lock lock(mutex);
-  file = new BSPFile(mapPath(_file).c_str());
+  file = new BSPFile(getWorld(), mapPath(_file).c_str());
   mapName = _file;
 
   getWorld()->getPhysicsWorld()->physicsStepping.addClosure([this] {
@@ -263,7 +263,7 @@ void Worldspawn::deserialize(net::BitStream& stream) {
       std::string newMap = stream.readString();
       if (!newMap.empty() && mapName != newMap) {
         mapName = newMap;
-        file = new BSPFile(mapPath(mapName).c_str());
+        file = new BSPFile(getWorld(), mapPath(mapName).c_str());
         getWorld()->getPhysicsWorld()->physicsStepping.addClosure([this] {
           std::scoped_lock lock(mutex);
           file->addToPhysicsWorld(getWorld()->getPhysicsWorld());

@@ -4,6 +4,7 @@
 #include "gfx/base_types.hpp"
 #include "gfx/engine.hpp"
 #include "physics.hpp"
+#include "resource.hpp"
 
 namespace ww {
 using namespace rdm;
@@ -38,7 +39,7 @@ struct BSPDirentry {
 };
 
 struct BSPFaceModel {
-  gfx::BaseTexture* m_texture;
+  resource::Texture* m_texture;
   gfx::BaseTexture* m_lightmap;
   std::unique_ptr<gfx::BaseBuffer> m_buffer;
   std::unique_ptr<gfx::BaseBuffer> m_index;
@@ -186,6 +187,8 @@ class BSPFile {
   gfx::BaseTexture* m_skybox;
   std::vector<BSPEntity> entities;
 
+  std::map<std::string, resource::Texture*> textures;
+
   void readEntitesLump(BSPDirentry* dirent);
   void addLeafFaces(BSPLeaf* leaf, bool brush, bool leafface);
   void parseTreeNode(BSPNode* node, bool brush, bool leafface);
@@ -196,7 +199,7 @@ class BSPFile {
   gfx::Engine* engine;
 
  public:
-  BSPFile(const char* bsp);
+  BSPFile(World* world, const char* bsp);
   ~BSPFile();
 
   std::vector<BSPEntity> getEntities() { return entities; }

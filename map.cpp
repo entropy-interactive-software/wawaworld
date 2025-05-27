@@ -37,7 +37,7 @@ void* BSPDirentry::loadData(std::vector<unsigned char>& data) {
   return d;
 }
 
-BSPFile::BSPFile(const char* bsp) {
+BSPFile::BSPFile(World* world, const char* bsp) {
   m_name = bsp;
   m_gfxEnabled = false;
   common::OptionalData od = common::FileSystem::singleton()->readFile(bsp);
@@ -55,6 +55,41 @@ BSPFile::BSPFile(const char* bsp) {
       direntData[i] = ent_data;
       Log::printf(LOG_DEBUG, "Loaded dirent %i (size %i bytes)", i,
                   ent->length);
+    }
+
+    for (int i = 0;
+         i < m_header.dirents[BSP_TEXTURES].length / sizeof(BSPTexture); i++) {
+      BSPTexture bsp_texture = ((BSPTexture*)direntData[BSP_TEXTURES])[i];
+
+      std::string extensions[] = {
+          ".png", ".jpg", ".tga", ".PNG", ".JPG", ".TGA",
+      };
+      resource::Texture* texture;
+      for (std::string extension : extensions) {
+        std::string txpath =
+            std::string("dat5/baseq3/") + bsp_texture.name + extension;
+        auto t = world->getGame()->getResourceManager()->load(
+            BaseResource::Texture, txpath.c_str());
+        if (t) {
+          texture = dynamic_cast<resource::Texture*>(t);
+          break;
+        }
+      }
+      if (texture == 0) {
+        Log::printf(LOG_WARN, "Could not find texture %s", bsp_texture.name);
+        auto t = world->getGame()->getResourceManager()->load(
+            BaseResource::Texture, "dat5/missingtexture.png");
+        if (t)
+          texture = dynamic_cast<resource::Texture*>(t);
+        else
+          texture = 0;
+      }
+      if (texture) {
+        /*m.m_texture->setFiltering(gfx::BaseTexture::Nearest,
+          gfx::BaseTexture::Nearest);*/
+      }
+
+      textures[bsp_texture.name] = texture;
     }
 
     BSPDirentry* f = &m_header.dirents[BSP_ENTITIES];
@@ -270,24 +305,25 @@ BSPFaceModel BSPFile::addFaceModel(BSPFace* face) {
       for (std::string extension : extensions) {
         std::string txpath =
             std::string("dat5/baseq3/") + texture.name + extension;
-        auto t = engine->getTextureCache()->getOrLoad2d(txpath.c_str());
+        auto t = engine->getWorld()->getGame()->getResourceManager()->load(
+            BaseResource::Texture, txpath.c_str());
         if (t) {
-          m.m_texture = t->second;
+          m.m_texture = dynamic_cast<resource::Texture*>(t);
           break;
         }
       }
       if (m.m_texture == 0) {
         Log::printf(LOG_WARN, "Could not find texture %s", texture.name);
-        auto t =
-            engine->getTextureCache()->getOrLoad2d("dat5/missingtexture.png");
+        auto t = engine->getWorld()->getGame()->getResourceManager()->load(
+            BaseResource::Texture, "dat5/missingtexture.png");
         if (t)
-          m.m_texture = t->second;
+          m.m_texture = dynamic_cast<resource::Texture*>(t);
         else
           m.m_texture = 0;
       }
       if (m.m_texture) {
-        m.m_texture->setFiltering(gfx::BaseTexture::Nearest,
-                                  gfx::BaseTexture::Nearest);
+        /*m.m_texture->setFiltering(gfx::BaseTexture::Nearest,
+          gfx::BaseTexture::Nearest);*/
       }
     }
   } catch (std::exception& e) {
@@ -358,7 +394,7 @@ void BSPFile::renderFaceModel(gfx::RenderList& list, BSPFaceModel* model,
                              model->m_indexCount / sizeof(int),
                              model->m_layout.get());
   if (model->type == BSPFaceModel::Opaque) {
-    command.setTexture(0, model->m_texture);
+    command.setTexture(0, model->m_texture->getTexture());
     command.setTexture(1, model->m_lightmap);
   }
   list.add(command);
