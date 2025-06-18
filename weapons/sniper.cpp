@@ -23,6 +23,11 @@ WeaponSniper::WeaponSniper(net::NetworkManager* manager, net::EntityId id)
   }
 }
 
+void WeaponSniper::precache(net::NetworkManager* manager) {
+  manager->getGame()->getResourceManager()->load<rdm::resource::Model>(
+      "dat5/weapons/w_sniper_rifle.glb");
+}
+
 void WeaponSniper::tick() {
   if (!getManager()->isBackend() && getOwnerRef()) {
     emitter->node = getOwnerRef()->getNode();

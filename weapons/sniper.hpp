@@ -10,6 +10,8 @@ class WeaponSniper : public Weapon {
  public:
   WeaponSniper(net::NetworkManager* manager, net::EntityId id);
 
+  static void precache(net::NetworkManager* manager);
+
   virtual void tick();
   virtual void primaryFire();
 

@@ -62,6 +62,8 @@ class WPlayer : public net::Player {
   virtual void deserializeUnreliable(net::BitStream& stream);
   virtual const char* getTypeName() { return "WPlayer"; };
 
+  static void precache(net::NetworkManager* manager);
+
   void setStatus(Status status) {
     this->status = status;
     getManager()->addPendingUpdate(getEntityId());

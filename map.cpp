@@ -298,33 +298,14 @@ BSPFaceModel BSPFile::addFaceModel(BSPFace* face) {
       m.type = BSPFaceModel::Sky;
     } else {
       m.type = BSPFaceModel::Opaque;
-      std::string extensions[] = {
-          ".png", ".jpg", ".tga", ".PNG", ".JPG", ".TGA",
-      };
-      m.m_texture = 0;
-      for (std::string extension : extensions) {
-        std::string txpath =
-            std::string("dat5/baseq3/") + texture.name + extension;
-        auto t = engine->getWorld()->getGame()->getResourceManager()->load(
-            BaseResource::Texture, txpath.c_str());
-        if (t) {
-          m.m_texture = dynamic_cast<resource::Texture*>(t);
-          break;
-        }
-      }
-      if (m.m_texture == 0) {
-        Log::printf(LOG_WARN, "Could not find texture %s", texture.name);
-        auto t = engine->getWorld()->getGame()->getResourceManager()->load(
-            BaseResource::Texture, "dat5/missingtexture.png");
-        if (t)
-          m.m_texture = dynamic_cast<resource::Texture*>(t);
-        else
-          m.m_texture = 0;
-      }
-      if (m.m_texture) {
-        /*m.m_texture->setFiltering(gfx::BaseTexture::Nearest,
-          gfx::BaseTexture::Nearest);*/
-      }
+      if (textures.find(texture.name) != textures.end())
+        m.m_texture = textures[texture.name];
+      else
+        m.m_texture =
+            ((resource::Texture*)engine->getWorld()
+                 ->getGame()
+                 ->getResourceManager()
+                 ->load(BaseResource::Texture, "dat5/missingtexture.png"));
     }
   } catch (std::exception& e) {
     m.m_texture = 0;
@@ -426,7 +407,7 @@ void BSPFile::draw() {
                                                 .texture.texture = m_skybox});
   gfx::RenderListSettings skySettings;
   skySettings.cull = rdm::gfx::BaseDevice::BackCCW;
-  skySettings.state = rdm::gfx::BaseDevice::Disabled;
+  skySettings.state = rdm::gfx::BaseDevice::DepthStencilState::Disabled;
   gfx::RenderList skybox(sky, NULL, skySettings);
 
   gfx::RenderList transparent(engine->getMaterialCache()

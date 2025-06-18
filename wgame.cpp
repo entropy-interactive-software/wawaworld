@@ -69,13 +69,10 @@ WGame::~WGame() { delete game; }
 
 void WGame::addEntityConstructors(network::NetworkManager* manager) {
   manager->setPassword("RDMEXRDMEXRDMEX");
-  manager->registerConstructor(network::EntityConstructor<Worldspawn>,
-                               "Worldspawn");
-  manager->registerConstructor(network::EntityConstructor<WPlayer>, "WPlayer");
-  manager->registerConstructor(network::EntityConstructor<WeaponSniper>,
-                               "WeaponSniper");
-  manager->registerConstructor(network::EntityConstructor<WeaponMagnum>,
-                               "WeaponMagnum");
+  manager->registerConstructor<Worldspawn>("Worldspawn");
+  manager->registerConstructor<WPlayer>("WPlayer");
+  manager->registerConstructor<WeaponSniper>("WeaponSniper");
+  manager->registerConstructor<WeaponMagnum>("WeaponMagnum");
   manager->setPlayerType("WPlayer");
 }
 

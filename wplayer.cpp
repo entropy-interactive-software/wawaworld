@@ -25,6 +25,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 
+#define PLAYERMODEL "dat5/models/playermodel_rdm.glb"
+
 namespace gfx = rdm::gfx;
 namespace ww {
 class PlayerEntity : public gfx::Entity {
@@ -104,6 +106,10 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
   wantedWeaponId = getManager()->isBackend() ? -1 : 1;
   heldWeaponRef = NULL;
 
+  resource::Model* model =
+      getGame()->getResourceManager()->load<resource::Model>(PLAYERMODEL);
+  resource::Model::Animator* animator = new resource::Model::Animator();
+
   firingState[0] = false;
   firingState[1] = false;
   if (!getManager()->isBackend()) {
@@ -124,7 +130,7 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
         controller->updateCamera(getGfxEngine()->getCamera());
       }
     });
-    gfxJob = getGfxEngine()->renderStepped.listen([this] {
+    gfxJob = getGfxEngine()->renderStepped.listen([this, model, animator] {
       {
         std::scoped_lock lock(getWorld()->getPhysicsWorld()->mutex);
         btTransform transform;
@@ -173,23 +179,22 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
                     peer.peer->packetsLost);
 
         ImGui::End();
+
+        controller->imguiDebug();
       }
 
       // if (getManager()->getLocalPeer().peerId == remotePeerId.get()) return;
 
       if (!isLocalPlayer()) {
-        std::shared_ptr<gfx::Material> material =
-            getGfxEngine()->getMaterialCache()->getOrLoad("Mesh").value();
-        gfx::BaseProgram* program =
-            material->prepareDevice(getGfxEngine()->getDevice(), 0);
-        program->setParameter("model", gfx::DtMat4,
-                              gfx::BaseProgram::Parameter{
-                                  .matrix4x4 = entityNode->worldTransform()});
-        gfx::Model* model = getGfxEngine()
-                                ->getMeshCache()
-                                ->get("dat5/baseq3/models/andi_rig.obj")
-                                .value();
-        model->render(getGfxEngine()->getDevice());
+        animator->animation = model->getAnimation("idle_animation");
+        model->updateAnimator(getGfxEngine(), animator);
+        model->render(getGfxEngine()->getDevice(), animator, NULL,
+                      [this](gfx::BaseProgram* program) {
+                        program->setParameter(
+                            "model", gfx::DtMat4,
+                            gfx::BaseProgram::Parameter{
+                                .matrix4x4 = getNode()->worldTransform()});
+                      });
 
         if (heldWeaponRef) heldWeaponRef->renderWorld();
       } else {
@@ -404,6 +409,10 @@ void WPlayer::serializeUnreliable(net::BitStream& stream) {
 
   stream.write<bool>(firingState[0]);
   stream.write<bool>(firingState[1]);
+}
+
+void WPlayer::precache(net::NetworkManager* manager) {
+  manager->getGame()->getResourceManager()->load<resource::Model>(PLAYERMODEL);
 }
 
 void WPlayer::deserializeUnreliable(net::BitStream& stream) {

@@ -1,5 +1,6 @@
 subprojects/rdm4001
 build
+build-release
 .vscode
 data/dat2 
 data/dat4
