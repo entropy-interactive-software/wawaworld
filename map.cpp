@@ -20,10 +20,6 @@
 #include "settings.hpp"
 #include "wgame.hpp"
 
-#ifndef DISABLE_EASY_PROFILER
-#include <easy/profiler.h>
-#endif
-
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 

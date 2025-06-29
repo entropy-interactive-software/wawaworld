@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "console.hpp"
+#include "fun.hpp"
 #include "gfx/base_types.hpp"
 #include "gfx/engine.hpp"
 #include "gfx/imgui/imgui.h"
