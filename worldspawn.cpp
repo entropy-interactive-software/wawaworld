@@ -30,6 +30,69 @@ static rdm::ConsoleCommand changelevel(
       }
     });
 
+class WorldspawnStatusGui : public gfx::gui::NGui {
+  gfx::gui::Font* font;
+  gfx::gui::Font* bigFont;
+  resource::Texture* lobbyImage;
+
+ public:
+  WorldspawnStatusGui(gfx::gui::NGuiManager* gui, gfx::Engine* engine)
+      : NGui(gui, engine) {
+    font = gui->getFontCache()->get("engine/gui/eras.ttf", 24);
+    bigFont = gui->getFontCache()->get("engine/gui/eras.ttf", 48);
+    lobbyImage = getGame()->getResourceManager()->load<resource::Texture>(
+        "engine/gui/lobby_menu.png");
+  }
+
+  virtual void render(gfx::gui::NGuiRenderer* renderer) {
+    if (!getGame()->getWorld()->getNetworkManager()->getEntityById(0)) return;
+    Worldspawn* worldspawn = dynamic_cast<Worldspawn*>(
+        getGame()->getWorld()->getNetworkManager()->getEntityById(0));
+
+    renderer->setColor(glm::vec3(1.f));
+
+    int xoff = 100;
+    if (worldspawn->getStatus() == Worldspawn::RoundBeginning) {
+      const char* gameModeText[] = {"Deathmatch", "Murder"};
+
+      glm::vec2 res = getEngine()->getTargetResolution();
+      glm::ivec2 offset =
+          glm::vec2((res.x / 2) - (800 / 2), (res.y / 2) - (600 / 2));
+      glm::vec2 top = glm::ivec2(800, 600);
+      renderer->image(lobbyImage->getTexture(), offset, glm::vec2(800, 600));
+
+      xoff += renderer
+                  ->text(offset + glm::ivec2(100, top.y - 70), font, 0, "%s",
+                         gameModeText[worldspawn->getGameMode()])
+                  .first;
+
+      float timeRemaining =
+          worldspawn->getRoundStartTime() -
+          getGame()->getWorld()->getNetworkManager()->getDistributedTime();
+      int w = renderer
+                  ->text(glm::ivec2(res.x / 2, top.y - 98), bigFont, 0,
+                         timeRemaining < 0.f ? "PLEASE WAIT" : "%3.1f",
+                         timeRemaining)
+                  .first;
+      glm::vec2 o = renderer->getLastCommand()->getOffset().value();
+      o.x = 595 - (w / 2);
+      o = glm::vec2(offset) + o;
+      renderer->getLastCommand()->setOffset(o);
+
+      int yoff = top.y - 173;
+      for (auto [id, peer] :
+           getGame()->getWorld()->getNetworkManager()->getPeers()) {
+        yoff -= renderer
+                    ->text(offset + glm::ivec2(73, yoff), font, 268, "s",
+                           peer.playerEntity->displayName.get().c_str())
+                    .second;
+      }
+    }
+  }
+};
+
+NGUI_INSTANTIATOR(WorldspawnStatusGui);
+
 Worldspawn::Worldspawn(net::NetworkManager* manager, net::EntityId id)
     : net::Entity(manager, id) {
   file = NULL;
@@ -45,21 +108,6 @@ Worldspawn::Worldspawn(net::NetworkManager* manager, net::EntityId id)
       std::scoped_lock lock(mutex);
       if (file) file->updatePosition(getGfxEngine()->getCamera().getPosition());
     });
-    gfxJob = getGfxEngine()->renderStepped.listen([this] {
-      if (currentStatus == RoundBeginning || currentStatus == RoundEnding) {
-        ImGui::Begin("Round");
-        ImGui::Text("Time until round %s: %0.1f",
-                    currentStatus == RoundEnding ? "ending" : "starting",
-                    roundStartTime - getManager()->getDistributedTime());
-        for (auto& peer : getManager()->getPeers()) {
-          if (!peer.second.playerEntity) continue;
-          ImGui::Text("%s (%ims, %i loss)",
-                      peer.second.playerEntity->displayName.get().c_str(),
-                      peer.second.roundTripTime, peer.second.packetLoss);
-        }
-        ImGui::End();
-      }
-    });
     emitter.reset(getGame()->getSoundManager()->newEmitter());
   } else {
     setStatus(WaitingForPlayer);
@@ -70,7 +118,6 @@ Worldspawn::~Worldspawn() {
   if (!getManager()->isBackend()) {
     if (entity) getGfxEngine()->deleteEntity(entity);
     getWorld()->stepped.removeListener(worldJob);
-    getGfxEngine()->renderStepped.removeListener(gfxJob);
   }
 
   if (file) destroyFile();
@@ -162,7 +209,7 @@ void Worldspawn::tick() {
           emitter->play(getGame()
                             ->getSoundManager()
                             ->getSoundCache()
-                            ->get("dat5/mus/stef45.ogg", Sound::Stream)
+                            ->get("rdm/mus/stef45.ogg", Sound::Stream)
                             .value());
       } else {
         getWorld()->setTitle("RDM: Lobby");
@@ -180,6 +227,7 @@ void Worldspawn::tick() {
             WPlayer* player = dynamic_cast<WPlayer*>(ent);
             rdm::putil::FpsController* controller = player->getController();
             controller->teleport(spawnLocation());
+            player->setStatus(WPlayer::InGame);
             getManager()->addPendingUpdateUnreliable(player->getEntityId());
           }
         }
@@ -250,7 +298,7 @@ glm::vec3 Worldspawn::spawnLocation() {
 }
 
 std::string Worldspawn::mapPath(std::string name) {
-  return std::format("dat5/baseq3/maps/{}.bsp", name);
+  return std::format("rdm/baseq3/maps/{}.bsp", name);
 }
 
 void Worldspawn::deserialize(net::BitStream& stream) {

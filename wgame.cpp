@@ -57,6 +57,8 @@ struct WGamePrivate {
 
 using namespace rdm;
 WGame::WGame() : Game() {
+  setIcon("dat5/icon.png");
+
   Input::singleton()->newAxis("ForwardBackward", SDLK_w, SDLK_s);
   Input::singleton()->newAxis("LeftRight", SDLK_a, SDLK_d);
 
@@ -76,15 +78,21 @@ void WGame::addEntityConstructors(network::NetworkManager* manager) {
   manager->setPlayerType("WPlayer");
 }
 
+static CVar ip("ip", "", CVARF_CONSOLE_ARGUMENT);
+static CVar port("port", "7938", CVARF_CONSOLE_ARGUMENT);
+
 void WGame::initializeClient() {
   addEntityConstructors(getWorld()->getNetworkManager());
 
   startGameState(GameStateConstructor<WWGameState>);
 
+  getGfxEngine()->getMaterialCache()->addDataFile(
+      "rdm/materials/materials.json");
+
   // gfxEngine->setForcedAspect(4.0 / 3.0);
 
   world->setTitle("RDM");
-  world->getPhysicsWorld()->getWorld()->setGravity(btVector3(0, 0, -206.67));
+  world->getPhysicsWorld()->getWorld()->setGravity(btVector3(0, 0, -406.67));
 
   std::scoped_lock lock(world->worldLock);
   world->stepped.listen([this] {
@@ -242,10 +250,8 @@ void WGame::initializeClient() {
     }
   });
 
-  if (!Settings::singleton()->getHintConnectIP().empty()) {
-    world->getNetworkManager()->connect(
-        Settings::singleton()->getHintConnectIP(),
-        Settings::singleton()->getHintConnectPort());
+  if (!ip.getValue().empty()) {
+    world->getNetworkManager()->connect(ip.getValue(), port.getInt());
   }
 }
 
@@ -260,17 +266,25 @@ void WGame::initializeServer() {
   wspawn->setNextMap(hostParams->map);
 }
 
+static CVar server("server", "false", CVARF_CONSOLE_ARGUMENT);
+static CVar host("host", "false", CVARF_CONSOLE_ARGUMENT);
+
 void WGame::initialize() {
   hostParams = new HostParameters;
+  hostParams->port = port.getInt();
 
   WorldConstructorSettings& settings = getWorldConstructorSettings();
   settings.network = true;
   settings.physics = true;
 
-  if (rdm::Settings::singleton()->getHintDs()) {
+  if (server.getBool()) {
     startServer();
   } else {
     startClient();
+    if (host.getBool()) {
+      startServer();
+      world->getNetworkManager()->connect("127.0.0.1", port.getInt());
+    }
   }
 }
 }  // namespace ww

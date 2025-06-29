@@ -15,8 +15,8 @@
 namespace ww {
 WeaponSniper::WeaponSniper(net::NetworkManager* manager, net::EntityId id)
     : Weapon(manager, id) {
-  viewModel = "dat5/weapons/w_sniper_rifle.glb";
-  worldModel = "dat5/weapons/w_sniper_rifle.glb";
+  viewModel = "rdm/weapons/w_sniper_rifle.glb";
+  worldModel = "rdm/weapons/w_sniper_rifle.glb";
 
   if (!manager->isBackend()) {
     emitter.reset(manager->getGame()->getSoundManager()->newEmitter());
@@ -25,7 +25,7 @@ WeaponSniper::WeaponSniper(net::NetworkManager* manager, net::EntityId id)
 
 void WeaponSniper::precache(net::NetworkManager* manager) {
   manager->getGame()->getResourceManager()->load<rdm::resource::Model>(
-      "dat5/weapons/w_sniper_rifle.glb");
+      "rdm/weapons/w_sniper_rifle.glb");
 }
 
 void WeaponSniper::tick() {
@@ -44,13 +44,14 @@ void WeaponSniper::primaryFire() {
                       ->getGame()
                       ->getSoundManager()
                       ->getSoundCache()
-                      ->get("dat5/weapons/357_shot1.wav")
+                      ->get("rdm/weapons/357_shot1.wav")
                       .value());
   }
 
   btTransform ownerTransform = getOwnerRef()->getController()->getTransform();
   btVector3 front = getOwnerRef()->getController()->getFront();
-  btVector3 from = ownerTransform.getOrigin();
+  btVector3 from = rdm::BulletHelpers::toVector3(
+      getOwnerRef()->getController()->getCameraOrigin());
   btVector3 to =
       from + (getOwnerRef()->getController()->getFront() * SHOT_DISTANCE);
   btCollisionWorld::AllHitsRayResultCallback callback(from, to);
@@ -61,6 +62,7 @@ void WeaponSniper::primaryFire() {
   rdm::Log::printf(rdm::LOG_DEBUG, "N: %f, %f, %f", front.x(), front.y(),
                    front.z());
   rdm::Log::printf(rdm::LOG_DEBUG, "-> %f, %f, %f", to.x(), to.y(), to.z());
+  positions.clear();
   for (int i = 0; i < callback.m_collisionObjects.size(); i++) {
     bool hitSomething = false;
     btVector3 hitWorld = callback.m_hitPointWorld[i];
@@ -83,7 +85,7 @@ void WeaponSniper::primaryFire() {
                        hitNormal.y(), hitNormal.z());
       rdm::Log::printf(rdm::LOG_DEBUG, "Distance: %f",
                        hitRatio * SHOT_DISTANCE);
-      break;
+      positions.push_back(rdm::BulletHelpers::fromVector3(hitWorld));
     }
   }
 

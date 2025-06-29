@@ -1,4 +1,6 @@
 #pragma once
+#include <glm/glm.hpp>
+
 #include "network/entity.hpp"
 namespace net = rdm::network;
 namespace ww {
@@ -27,5 +29,7 @@ class Weapon : public net::Entity {
   WPlayer* getOwnerRef() { return ownerRef; }
 
   virtual const char* getTypeName() { return "Weapon"; };
+
+  std::vector<glm::vec3> positions;
 };
 };  // namespace ww

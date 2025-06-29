@@ -44,6 +44,7 @@ class WPlayer : public net::Player {
   virtual ~WPlayer();
 
   void listWeapons();
+  std::vector<Weapon*> getOwnedWeapons() { return ownedWeapons; }
 
   void giveWeapon(Weapon* weapon);
 

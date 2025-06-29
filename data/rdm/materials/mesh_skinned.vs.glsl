@@ -8,7 +8,7 @@ layout(location = 2) in vec2 v_uv;
 layout(location = 3) in ivec4 v_bone_ids;
 layout(location = 4) in vec4 v_weights;
 
-uniform mat4 boneTransform[MAX_BONES];
+layout(std140) uniform BoneTransformBlock { mat4 boneTransform[MAX_BONES]; };
 
 uniform mat4 model = mat4(1);
 uniform mat4 viewMatrix = mat4(1);
@@ -41,8 +41,8 @@ void main() {
   }
   if (null_ids == 4) total_pos = vec4(v_position, 1.0);
 
-  // v_ftotal_pos = total_pos;
-  total_pos = vec4(v_position, 1.0f);
+  v_ftotal_pos = total_pos;
+  // total_pos = vec4(v_position, 1.0f);
 
   v_fvnorm = mat3(viewMatrix * model) * v_normal;
   v_fmpos = vec3(model * total_pos);

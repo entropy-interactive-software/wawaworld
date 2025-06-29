@@ -58,6 +58,9 @@ class Worldspawn : public net::Entity {
   virtual void deserialize(net::BitStream& stream);
 
   GameMode getGameMode() { return gameMode; }
+  Status getStatus() { return currentStatus; }
+
+  float getRoundStartTime() { return roundStartTime; }
 
  private:
   Status currentStatus;

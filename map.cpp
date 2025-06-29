@@ -17,11 +17,15 @@
 #include "gfx/renderpass.hpp"
 #include "logging.hpp"
 #include "physics.hpp"
+#include "settings.hpp"
 #include "wgame.hpp"
 
 #ifndef DISABLE_EASY_PROFILER
 #include <easy/profiler.h>
 #endif
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/norm.hpp>
 
 // taken from matrix
 
@@ -64,10 +68,10 @@ BSPFile::BSPFile(World* world, const char* bsp) {
       std::string extensions[] = {
           ".png", ".jpg", ".tga", ".PNG", ".JPG", ".TGA",
       };
-      resource::Texture* texture;
+      resource::Texture* texture = NULL;
       for (std::string extension : extensions) {
         std::string txpath =
-            std::string("dat5/baseq3/") + bsp_texture.name + extension;
+            std::string("rdm/baseq3/") + bsp_texture.name + extension;
         auto t = world->getGame()->getResourceManager()->load(
             BaseResource::Texture, txpath.c_str());
         if (t) {
@@ -78,7 +82,7 @@ BSPFile::BSPFile(World* world, const char* bsp) {
       if (texture == 0) {
         Log::printf(LOG_WARN, "Could not find texture %s", bsp_texture.name);
         auto t = world->getGame()->getResourceManager()->load(
-            BaseResource::Texture, "dat5/missingtexture.png");
+            BaseResource::Texture, RESOURCE_MISSING_TEXTURE);
         if (t)
           texture = dynamic_cast<resource::Texture*>(t);
         else
@@ -236,8 +240,11 @@ BSPFaceModel BSPFile::addFaceModel(BSPFace* face) {
       for (int v = face->meshvert; v < (face->meshvert + face->n_meshverts);
            v++)
         indices.push_back(meshverts[v]);
-      for (int v = face->vertex; v < (face->vertex + face->n_vertices); v++)
+      for (int v = face->vertex; v < (face->vertex + face->n_vertices); v++) {
         vertices.push_back(verts[v]);
+        m.position += verts[v].position;
+      }
+      m.position /= face->n_vertices;
       std::reverse(indices.begin(),
                    indices.end());  // the indices must be flipped so it renders
                                     // the inside of the mesh
@@ -305,7 +312,7 @@ BSPFaceModel BSPFile::addFaceModel(BSPFace* face) {
             ((resource::Texture*)engine->getWorld()
                  ->getGame()
                  ->getResourceManager()
-                 ->load(BaseResource::Texture, "dat5/missingtexture.png"));
+                 ->load(BaseResource::Texture, RESOURCE_MISSING_TEXTURE));
     }
   } catch (std::exception& e) {
     m.m_texture = 0;
@@ -378,17 +385,21 @@ void BSPFile::renderFaceModel(gfx::RenderList& list, BSPFaceModel* model,
     command.setTexture(0, model->m_texture->getTexture());
     command.setTexture(1, model->m_lightmap);
   }
+  command.setUser(model);
   list.add(command);
   /*engine->getDevice()->draw(model->m_index.get(), gfx::DtUnsignedInt,
                             gfx::BaseDevice::Triangles,
                             model->m_indexCount / sizeof(int));*/
 }
 
+static rdm::CVar sorting_system("sorting_system", "0", 0);
+
 void BSPFile::draw() {
+  rdm::Profiler& profiler = engine->getRenderJob()->getProfiler();
+
   if (!m_gfxEnabled) return;
-#ifndef DISABLE_EASY_PROFILER
-  EASY_FUNCTION("BSPFile::draw");
-#endif
+
+  profiler.fun("BSPFile::draw");
 
   gfx::RenderListSettings settings;
   settings.cull = rdm::gfx::BaseDevice::BackCCW;
@@ -420,6 +431,7 @@ void BSPFile::draw() {
   m_leafsRendered = 0;
   gfx::Frustrum frustrum = engine->getCamera().computeFrustrum();
 
+  profiler.fun("BSP submit faces");
   if (true) {  // TODO: use Settings or bring back matrix style ConVar system
     for (int i = 0; i < m_leafs.size(); i++) {
       BSPLeafModel& leaf = m_leafs.at(i);
@@ -469,18 +481,68 @@ void BSPFile::draw() {
       m_facesRendered++;
     }
   }
+  profiler.end();
 
-  opaque.sort([](gfx::RenderCommand const& a, gfx::RenderCommand const& b) {
-    gfx::BaseTexture *_a, *_b;
-    _a = a.getTexture(1);
-    _b = b.getTexture(1);
+  gfx::Camera& cam = engine->getCamera();
+  glm::vec3 camPosition = cam.getPosition();
 
-    return _a == _b ? (a.getTexture(0) < b.getTexture(0)) : (_a < _b);
-  });
+  profiler.fun("BSP sort");
+  opaque.sort(
+      [camPosition](gfx::RenderCommand const& a, gfx::RenderCommand const& b) {
+        switch (sorting_system.getInt()) {
+          case 1: {
+            BSPFaceModel* _ma = (BSPFaceModel*)a.getUser();
+            float da = glm::distance2(_ma->position, camPosition);
+            BSPFaceModel* _mb = (BSPFaceModel*)b.getUser();
+            float db = glm::distance2(_mb->position, camPosition);
+            return da > db;
+          } break;
+          case 2: {
+            BSPFaceModel* _ma = (BSPFaceModel*)a.getUser();
+            float da = glm::distance2(_ma->position, camPosition);
+            BSPFaceModel* _mb = (BSPFaceModel*)b.getUser();
+            float db = glm::distance2(_mb->position, camPosition);
+            return da < db;
+          } break;
+          case 3: {
+            return false;  // dont do anything
+          } break;
+          case 4: {
+            gfx::BaseTexture *_a, *_b;
+            _a = a.getTexture(1);
+            _b = b.getTexture(1);
+
+            if (_a == _b) {
+              if (a.getTexture(0) == b.getTexture(0)) {
+                BSPFaceModel* _ma = (BSPFaceModel*)a.getUser();
+                BSPFaceModel* _mb = (BSPFaceModel*)b.getUser();
+                if (!_ma || !_mb) return false;
+                float da = glm::distance2(_ma->position, camPosition);
+                float db = glm::distance2(_mb->position, camPosition);
+
+                return da < db;
+              } else
+                return a.getTexture(0) < b.getTexture(0);
+            } else
+              return _a < _b;
+          } break;
+          case 0:
+          default: {
+            gfx::BaseTexture *_a, *_b;
+            _a = a.getTexture(1);
+            _b = b.getTexture(1);
+
+            return _a == _b ? (a.getTexture(0) < b.getTexture(0)) : (_a < _b);
+          } break;
+        }
+      });
+  profiler.end();
 
   engine->pass(gfx::RenderPass::Opaque).add(skybox);
   engine->pass(gfx::RenderPass::Opaque).add(opaque);
   engine->pass(gfx::RenderPass::Transparent).add(transparent);
+
+  profiler.end();
 }
 
 void BSPFile::removeFromPhysicsWorld(PhysicsWorld* world) {
@@ -600,33 +662,33 @@ void BSPFile::initGfx(gfx::Engine* engine) {
     try {
       std::vector<void*> cubemap_textures = {
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_rt.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_rt.jpg",
+                            true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_lf.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg",
+                            true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_dn.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_dn.jpg",
+                            true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_up.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_up.jpg",
+                            true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_bk.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_bk.jpg",
+                            true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_ft.jpg", true)
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_ft.jpg",
+                            true)
               .value()
               .first.data,
       };
@@ -634,13 +696,11 @@ void BSPFile::initGfx(gfx::Engine* engine) {
           engine->getDevice()->createTexture();
       skybox->uploadCubeMap(
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_lf.jpg")
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg")
               .value()
               .first.width,
           engine->getTextureCache()
-              ->getOrLoad2d(
-                  "dat5/baseq3/textures/skies/null_plainsky512_lf.jpg")
+              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg")
               .value()
               .first.height,
           cubemap_textures);

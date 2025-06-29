@@ -68,11 +68,11 @@ void main() {
   vec3 r = reflect(i, normalize(v_fnormal));
 
   vec4 samplet = texture2D(texture0, vec2(v_fuv.x, -v_fuv.y));
-  // vec4 samplel = textureBicubic(texture1, v_flm_uv) * gamma;
-  vec4 samplel = texture2D(texture1, v_flm_uv) * gamma;
-  //  vec4 samples = texture(skybox, vec3(r.x, -r.z, r.y)) * shininess;
+  vec4 samplel = textureBicubic(texture1, v_flm_uv) * gamma;
+  // vec4 samplel = texture2D(texture1, v_flm_uv) * gamma;
+  //   vec4 samples = texture(skybox, vec3(r.x, -r.z, r.y)) * shininess;
 
-  // float intensity = dot(v_fnormal, normalize(vec3(0.5, 0.5, 0.5)));
+  // float intensity = dot(v_fnormal, normalize(vec3(0.2126, 0.7152, 0.0722)));
   vec3 result = samplet.xyz * samplel.xyz /* + samples.xyz*/;
   // vec3 result = vec3(0.2) + (intensity * vec3(0.8));
   //  float brightness = dot(result, vec3(0.2126, 0.7152, 0.0722));

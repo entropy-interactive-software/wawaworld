@@ -43,6 +43,7 @@ struct BSPFaceModel {
   gfx::BaseTexture* m_lightmap;
   std::unique_ptr<gfx::BaseBuffer> m_buffer;
   std::unique_ptr<gfx::BaseBuffer> m_index;
+  glm::vec3 position;
   enum Type { Opaque, Sky, Transparent } type;
   int m_indexCount;
   std::unique_ptr<gfx::BaseArrayPointers> m_layout;
