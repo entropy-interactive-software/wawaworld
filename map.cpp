@@ -658,32 +658,32 @@ void BSPFile::initGfx(gfx::Engine* engine) {
     try {
       std::vector<void*> cubemap_textures = {
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_rt.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testrt0001.bmp",
                             true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testlf0001.bmp",
                             true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_dn.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testdn0001.bmp",
                             true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_up.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testup0001.bmp",
                             true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_bk.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testbk0001.bmp",
                             true)
               .value()
               .first.data,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_ft.jpg",
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testft0001.bmp",
                             true)
               .value()
               .first.data,
@@ -692,11 +692,11 @@ void BSPFile::initGfx(gfx::Engine* engine) {
           engine->getDevice()->createTexture();
       skybox->uploadCubeMap(
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg")
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testft0001.bmp")
               .value()
               .first.width,
           engine->getTextureCache()
-              ->getOrLoad2d("rdm/baseq3/textures/skies/null_plainsky512_lf.jpg")
+              ->getOrLoad2d("rdm/baseq3/textures/skies/sky_testft0001.bmp")
               .value()
               .first.height,
           cubemap_textures);

@@ -27,8 +27,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 
-#define PLAYERMODEL "rdm/models/playermodel_rdm.glb"
-
 static rdm::CVar desired_fov("desired_fov", "75.0", CVARF_SAVE);
 
 namespace gfx = rdm::gfx;
@@ -208,6 +206,49 @@ NGUI_INSTANTIATOR(PlayerStatusUI);
 
 static CVar cl_showpos("cl_showpos", "0", CVARF_SAVE);
 
+class PlayerPositionUI : public gfx::gui::NGui {
+  gfx::gui::Font* font;
+
+ public:
+  PlayerPositionUI(gfx::gui::NGuiManager* gui, gfx::Engine* engine)
+      : NGui(gui, engine) {
+    font = gui->getFontCache()->get(UI_FONT);
+  }
+
+  virtual void render(gfx::gui::NGuiRenderer* renderer) {
+    if (!cl_showpos.getBool()) return;
+    if (!getGame()
+             ->getWorld()
+             ->getNetworkManager()
+             ->getLocalPeer()
+             .playerEntity)
+      return;
+    WPlayer* player = dynamic_cast<WPlayer*>(getGame()
+                                                 ->getWorld()
+                                                 ->getNetworkManager()
+                                                 ->getLocalPeer()
+                                                 .playerEntity);
+    if (player->getStatus() != WPlayer::InGame) return;
+    putil::FpsController* controller = player->getController();
+    btVector3 origin = controller->getTransform().getOrigin();
+    int off = 0;
+    off += renderer
+               ->text(glm::vec2(0, 200 - off), font, 0,
+                      "X: %0.2f Y: %0.2f Z: %0.2f", origin.x(), origin.y(),
+                      origin.z())
+               .second;
+
+    btVector3 vel = controller->getRigidBody()->getLinearVelocity();
+    off +=
+        renderer
+            ->text(glm::vec2(0, 200 - off), font, 0,
+                   "aX: %0.2f aY: %0.2f aZ: %0.2f", vel.x(), vel.y(), vel.z())
+            .second;
+  }
+};
+
+NGUI_INSTANTIATOR(PlayerPositionUI);
+
 std::map<int, std::string> WPlayer::weaponIds = {
     {1, "WeaponSniper"},
     {2, "WeaponMagnum"},
@@ -295,7 +336,9 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
         controller->updateCamera(getGfxEngine()->getCamera());
       }
     });
-    gfxJob = getGfxEngine()->renderStepped.listen([this, model, animator] {
+    gfxJob = getGfxEngine()->afterOpaqueNTransparentRendered.listen([this,
+                                                                     model,
+                                                                     animator] {
       {
         std::scoped_lock lock(getWorld()->getPhysicsWorld()->mutex);
         btTransform transform;
@@ -392,7 +435,7 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
 
 WPlayer::~WPlayer() {
   if (!getManager()->isBackend()) {
-    getGfxEngine()->renderStepped.removeListener(gfxJob);
+    getGfxEngine()->afterOpaqueNTransparentRendered.removeListener(gfxJob);
     getWorld()->stepped.removeListener(worldJob);
   }
 }

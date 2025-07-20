@@ -4,7 +4,6 @@
 
 #include "filesystem.hpp"
 #include "gfx/base_types.hpp"
-#include "gfx/gui/gui.hpp"
 #include "gfx/heightmap.hpp"
 #include "gfx/imgui/imgui.h"
 #include "gstate.hpp"
@@ -42,6 +41,9 @@ struct HostParameters {
   }
 };
 
+static CVar server("server", "false", CVARF_CONSOLE_ARGUMENT);
+static CVar host("host", "false", CVARF_CONSOLE_ARGUMENT);
+
 static HostParameters* hostParams;
 
 struct WGamePrivate {
@@ -57,7 +59,7 @@ struct WGamePrivate {
 
 using namespace rdm;
 WGame::WGame() : Game() {
-  setIcon("dat5/icon.png");
+  setIcon("rdm/icon.png");
 
   Input::singleton()->newAxis("ForwardBackward", SDLK_w, SDLK_s);
   Input::singleton()->newAxis("LeftRight", SDLK_a, SDLK_d);
@@ -93,6 +95,11 @@ void WGame::initializeClient() {
 
   world->setTitle("RDM");
   world->getPhysicsWorld()->getWorld()->setGravity(btVector3(0, 0, -406.67));
+
+  if (host.getBool()) {
+    startServer();
+    world->getNetworkManager()->connect("127.0.0.1", port.getInt());
+  }
 
   std::scoped_lock lock(world->worldLock);
   world->stepped.listen([this] {
@@ -266,9 +273,6 @@ void WGame::initializeServer() {
   wspawn->setNextMap(hostParams->map);
 }
 
-static CVar server("server", "false", CVARF_CONSOLE_ARGUMENT);
-static CVar host("host", "false", CVARF_CONSOLE_ARGUMENT);
-
 void WGame::initialize() {
   hostParams = new HostParameters;
   hostParams->port = port.getInt();
@@ -281,10 +285,6 @@ void WGame::initialize() {
     startServer();
   } else {
     startClient();
-    if (host.getBool()) {
-      startServer();
-      world->getNetworkManager()->connect("127.0.0.1", port.getInt());
-    }
   }
 }
 }  // namespace ww

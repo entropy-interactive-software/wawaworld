@@ -1,45 +1,5 @@
 {
     "Materials": {
-	"Sprite": { 
-	    "Techniques": [
-		{"ProgramName": "Sprite"}
-	    ]
-	},
-	"GuiPanel": {
-	    "Techniques": [
-		{"ProgramName": "GuiPanel"}
-	    ]
-	},
-	"GuiText": {
-	    "Techniques": [
-		{"ProgramName": "GuiText"}
-	    ]
-	},
-	"GuiImage": {
-	    "Techniques": [
-		{"ProgramName": "GuiImage"}
-	    ]
-	},
-	"Voxel": {
-	    "Techniques": [
-		{"ProgramName": "Voxel"}
-	    ]
-	},
-	"PostProcess": {
-	    "Techniques": [
-		{"ProgramName": "PostProcess1"}
-	    ]
-	},
-	"RayMarch": {
-	    "Techniques": [
-		{"ProgramName": "RayMarch"}
-	    ]
-	},
-	"HeightmapTesselated": {
-	    "Techniques": [
-		{"ProgramName": "HeightmapTesselated"}
-	    ]
-	},
 	"BspBrush": {
 	    "Techniques": [
 		{"ProgramName": "BspBrush"}
@@ -49,48 +9,10 @@
 	    "Techniques": [
 		{"ProgramName": "BspSky"}
 	    ]
-	},
-	"Mesh": {
-	    "Techniques": [
-		{"ProgramName": "Mesh"}
-	    ]
-	},
-	"MeshSkinned": {
-	    "Techniques": [
-		{"ProgramName": "MeshSkinned"}
-	    ]
-	},
-	"RoadTripMap": {
-	    "Techniques": [
-		{"ProgramName": "RoadTripMap"}
-	    ]
-	},
-	"GaussianBlur": {
-	    "Techniques": [
-		{"ProgramName": "GaussianBlur"}
-	    ]
-	},
-	"DbgPhysicsLine": {
-	    "Techniques": [
-		{"ProgramName": "DbgPhysicsLine"}
-	    ]
 	}
     },
     "Programs": {
-	"Sprite": {"VSName": "rdm/materials/sprite.vs", "FSName": "rdm/materials/sprite.fs"},
-	"GuiPanel": {"VSName": "rdm/materials/gui/panel.vs.glsl", "FSName": "rdm/materials/gui/panel.fs.glsl"},
-	"GuiText": {"VSName": "rdm/materials/gui/panel.vs.glsl", "FSName": "rdm/materials/gui/text.fs.glsl"},
-	"GuiImage": {"VSName": "rdm/materials/gui/panel.vs.glsl", "FSName": "rdm/materials/gui/image.fs.glsl"},
-	"Voxel": {"VSName": "rdm/materials/voxel.vs", "FSName": "rdm/materials/voxel.fs"},
-	"PostProcess1": {"VSName": "rdm/materials/post.vs.glsl", "FSName": "rdm/materials/post.fs.glsl"},
-	"RayMarch": {"VSName": "rdm/materials/post.vs.glsl", "FSName": "rdm/materials/ray_march.fs.glsl"},
-	"HeightmapTesselated": {"VSName": "rdm/materials/heightmap.vs.glsl", "FSName": "rdm/materials/heightmap.fs.glsl", "GSName": "rdm/materials/heightmap.gs.glsl"},
 	"BspBrush": {"VSName": "rdm/materials/bsp/brush.vs.glsl", "FSName": "rdm/materials/bsp/brush.fs.glsl"},
-	"BspSky": {"VSName": "rdm/materials/bsp/brush.vs.glsl", "FSName": "rdm/materials/bsp/sky.fs.glsl"},
-	"Mesh": {"VSName": "rdm/materials/mesh.vs.glsl", "FSName": "rdm/materials/mesh.fs.glsl"},
-	"MeshSkinned": {"VSName": "rdm/materials/mesh_skinned.vs.glsl", "FSName": "rdm/materials/mesh.fs.glsl"},
-	"GaussianBlur": {"VSName": "rdm/materials/post.vs.glsl", "FSName": "rdm/materials/blur.fs.glsl"},
-	"RoadTripMap": {"VSName": "rdm/materials/mesh.vs.glsl", "FSName": "rdm/materials/rt/map.fs.glsl"},
-	"DbgPhysicsLine": {"VSName": "rdm/materials/dbg/p_line.vs.glsl", "FSName": "rdm/materials/dbg/p_line.fs.glsl"}
+	"BspSky": {"VSName": "rdm/materials/bsp/brush.vs.glsl", "FSName": "rdm/materials/bsp/sky.fs.glsl"}
     }
 }

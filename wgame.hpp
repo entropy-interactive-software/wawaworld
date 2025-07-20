@@ -1,12 +1,14 @@
 #pragma once
 #include "game.hpp"
 #include "network/network.hpp"
+#include "planetmap.hpp"
 
 namespace ww {
 using namespace rdm;
 struct WGamePrivate;
 class WGame : public Game {
   WGamePrivate* game;
+  PlanetMap* planet;
 
  public:
   WGame();

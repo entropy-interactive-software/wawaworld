@@ -3,11 +3,13 @@
 #include "map.hpp"
 #include "network/bitstream.hpp"
 #include "network/entity.hpp"
+#include "planetmap.hpp"
 #include "sound.hpp"
 namespace net = rdm::network;
 namespace ww {
 class Worldspawn : public net::Entity {
   BSPFile* file;
+  PlanetMap* planet;
   rdm::ClosureId worldJob;
   rdm::ClosureId gfxJob;
   bool pendingAddToGfx;

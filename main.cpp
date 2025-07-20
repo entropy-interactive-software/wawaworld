@@ -10,4 +10,6 @@ int main(int argc, char** argv) {
 
   rdm::Log::printf(rdm::LOG_INFO, "Goodbye");
   rdm::Settings::singleton()->save();
+
+  return 0;
 }

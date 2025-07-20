@@ -10,6 +10,8 @@
 #include "sound.hpp"
 #include "weapon.hpp"
 
+#define PLAYERMODEL "rdm/models/playermodel_rdm.glb"
+
 namespace net = rdm::network;
 namespace ww {
 

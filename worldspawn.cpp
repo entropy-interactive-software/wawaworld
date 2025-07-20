@@ -41,7 +41,7 @@ class WorldspawnStatusGui : public gfx::gui::NGui {
     font = gui->getFontCache()->get("engine/gui/eras.ttf", 24);
     bigFont = gui->getFontCache()->get("engine/gui/eras.ttf", 48);
     lobbyImage = getGame()->getResourceManager()->load<resource::Texture>(
-        "engine/gui/lobby_menu.png");
+        "rdm/gui/lobby_menu.png");
   }
 
   virtual void render(gfx::gui::NGuiRenderer* renderer) {
@@ -82,6 +82,7 @@ class WorldspawnStatusGui : public gfx::gui::NGui {
       int yoff = top.y - 173;
       for (auto [id, peer] :
            getGame()->getWorld()->getNetworkManager()->getPeers()) {
+        if (!peer.playerEntity) continue;
         yoff -= renderer
                     ->text(offset + glm::ivec2(73, yoff), font, 268, "s",
                            peer.playerEntity->displayName.get().c_str())
