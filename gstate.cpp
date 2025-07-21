@@ -1,5 +1,7 @@
 #include "gstate.hpp"
 
+#include <qrencode.h>
+
 #include <format>
 #include <json.hpp>
 
@@ -10,6 +12,12 @@
 #include "settings.hpp"
 #include "state.hpp"
 #include "wplayer.hpp"
+
+#ifndef NDEBUG
+static rdm::CVar baseurl("baseurl", "http://127.0.0.1:8000/", CVARF_SAVE);
+#else
+static rdm::CVar baseurl("baseurl", "https://endoh.ca/", CVARF_HIDDEN);
+#endif
 
 using json = nlohmann::json;
 
@@ -46,6 +54,54 @@ class CharacterCreatorWindow : public rdm::gfx::gui::NGuiWindow {
     setLayout(new rdm::gfx::gui::NGuiHorizontalLayout());
 
     rdm::gfx::gui::NGuiPanel* panelLeft = new rdm::gfx::gui::NGuiPanel(manager);
+
+    rdm::gfx::gui::NGuiPanel* buttonRow0 =
+        new rdm::gfx::gui::NGuiPanel(manager);
+    buttonRow0->setLayout(new rdm::gfx::gui::NGuiHorizontalLayout());
+
+    rdm::gfx::gui::ImageButton* ibutton0 =
+        new rdm::gfx::gui::ImageButton(manager);
+    ibutton0->setOverTexture(
+        getGame()->getResourceManager()->load<rdm::resource::Texture>(
+            "rdm/gui/normal_guy.png"));
+    buttonRow0->addElement(ibutton0);
+
+    rdm::gfx::gui::ImageButton* ibutton1 =
+        new rdm::gfx::gui::ImageButton(manager);
+    ibutton1->setOverTexture(
+        getGame()->getResourceManager()->load<rdm::resource::Texture>(
+            "rdm/gui/magicka.png"));
+    buttonRow0->addElement(ibutton1);
+
+    rdm::gfx::gui::ImageButton* ibutton2 =
+        new rdm::gfx::gui::ImageButton(manager);
+    ibutton2->setOverTexture(
+        getGame()->getResourceManager()->load<rdm::resource::Texture>(
+            "rdm/gui/gunns.png"));
+    buttonRow0->addElement(ibutton2);
+
+    rdm::gfx::gui::ImageButton* ibutton3 =
+        new rdm::gfx::gui::ImageButton(manager);
+    ibutton3->setOverTexture(
+        getGame()->getResourceManager()->load<rdm::resource::Texture>(
+            "rdm/gui/muscle.png"));
+    buttonRow0->addElement(ibutton3);
+
+    panelLeft->addElement(buttonRow0);
+
+    rdm::gfx::gui::NGuiPanel* buttonRow1 =
+        new rdm::gfx::gui::NGuiPanel(manager);
+    buttonRow1->setLayout(new rdm::gfx::gui::NGuiHorizontalLayout());
+    for (int i = 0; i < 9; i++) {
+      rdm::gfx::gui::ImageButton* signbutton =
+          new rdm::gfx::gui::ImageButton(manager);
+      signbutton->setOverTexture(
+          getGame()->getResourceManager()->load<rdm::resource::Texture>(
+              std::format("rdm/gui/sign{}.png", i).c_str()));
+      buttonRow1->addElement(signbutton);
+    }
+    panelLeft->addElement(buttonRow1);
+
     rdm::gfx::gui::TextLabel* label0 = new rdm::gfx::gui::TextLabel(manager);
     label0->setText(
         "ピエール・エリオット・トルドー"
@@ -101,6 +157,8 @@ class CommunicationErrorWindow : public rdm::gfx::gui::NGuiWindow {
 
     errorLabel = new rdm::gfx::gui::TextLabel(manager);
     errorLabel->setText("Hi");
+    errorLabel->setTextMaxWidth(500);
+    errorLabel->setAutoWrap(true);
     addElement(errorLabel);
 
     rdm::gfx::gui::TextLabel* apology = new rdm::gfx::gui::TextLabel(manager);
@@ -158,9 +216,31 @@ NGUI_INSTANTIATOR(MotdWindow);
 
 static rdm::CVar ww_username("ww_global_username", "", CVARF_SAVE);
 
+class DbgProfileInfoWindow : public rdm::gfx::gui::NGuiWindow {
+  rdm::gfx::gui::TextLabel* allTheStuff;
+
+ public:
+  DbgProfileInfoWindow(rdm::gfx::gui::NGuiManager* manager,
+                       rdm::gfx::Engine* engine)
+      : rdm::gfx::gui::NGuiWindow(manager, engine) {
+    allTheStuff = new rdm::gfx::gui::TextLabel(manager);
+    addElement(allTheStuff);
+  }
+
+  virtual void opening() {
+    WWGameState* wg = dynamic_cast<WWGameState*>(getGame()->getGameState());
+    allTheStuff->setText(std::format("UUID: {}\nUsername: {}", wg->getOurUuid(),
+                                     ww_username.getValue()));
+  }
+};
+
+NGUI_INSTANTIATOR(DbgProfileInfoWindow);
+
 class PrepareUserWindow : public rdm::gfx::gui::NGuiWindow {
   rdm::gfx::gui::TextInput* username;
   rdm::gfx::gui::TextLabel* additionalInfo;
+  std::unique_ptr<rdm::gfx::BaseTexture> qrCodeTexture;
+  rdm::gfx::gui::Image* qrCodeImage;
 
  public:
   PrepareUserWindow(rdm::gfx::gui::NGuiManager* manager,
@@ -168,6 +248,7 @@ class PrepareUserWindow : public rdm::gfx::gui::NGuiWindow {
       : rdm::gfx::gui::NGuiWindow(manager, engine) {
     setTitle("Enter user information");
 
+    qrCodeTexture = engine->getDevice()->createTexture();
     setClosable(false);
     setDraggable(false);
     setCenter(true);
@@ -185,6 +266,11 @@ class PrepareUserWindow : public rdm::gfx::gui::NGuiWindow {
     additionalInfo->setText(" ");
     addElement(additionalInfo);
 
+    qrCodeImage = new rdm::gfx::gui::Image(manager);
+    // qrCodeImage->setTexture(qrCodeTexture.get());
+    qrCodeImage->setShowa(false);
+    addElement(qrCodeImage);
+
     rdm::gfx::gui::Button* okButton = new rdm::gfx::gui::Button(manager);
     okButton->setText("OK");
     okButton->setPressed([this, label0] {
@@ -197,6 +283,34 @@ class PrepareUserWindow : public rdm::gfx::gui::NGuiWindow {
   }
 
   void setMsg(std::string msg) { additionalInfo->setText(msg); }
+  void showTheFuckingThing(std::string uuid) {
+    std::string qrCodeUrl =
+        baseurl.getValue() + "home/add_authorized_key?pubkey=" + uuid.c_str();
+    QRcode* code =
+        QRcode_encodeString(qrCodeUrl.c_str(), 0, QR_ECLEVEL_H, QR_MODE_8, 1);
+    std::vector<char> imgBuf;  // need to convert to rgb
+    for (int i = 0; i < code->width; i++) {
+      for (int j = 0; j < code->width; j++) {
+        int c = code->data[i + (j * code->width)];
+        if (c & 1) {
+          imgBuf.push_back(0x0);
+          imgBuf.push_back(0x0);
+          imgBuf.push_back(0x0);
+        } else {
+          imgBuf.push_back(0xff);
+          imgBuf.push_back(0xff);
+          imgBuf.push_back(0xff);
+        }
+      }
+    }
+    qrCodeTexture->upload2d(code->width, code->width, rdm::gfx::DtUnsignedByte,
+                            rdm::gfx::BaseTexture::RGB, imgBuf.data());
+    qrCodeTexture->setFiltering(rdm::gfx::BaseTexture::Nearest,
+                                rdm::gfx::BaseTexture::Nearest);
+    qrCodeImage->setSize(glm::vec2(code->width * 2.f));
+    qrCodeImage->setTexture(qrCodeTexture.get());
+    qrCodeImage->setShowa(true);
+  }
 
   virtual void closing() {
     ww_username.setValue(username->getLine());
@@ -250,9 +364,9 @@ void WWGameState::tickWaiting() {
                                         ->getGui<MotdWindow>();
               motdWin->setMotdText(p["motd"]);
               motdWin->open();
-              currentStage = WaitMotd;
+              setStage(WaitMotd);
             } else {
-              currentStage = needsAuthentication ? Authenticate : Done;
+              setStage(needsAuthentication ? Authenticate : Done);
             }
           } break;
         }
@@ -272,7 +386,7 @@ void WWGameState::tickWaiting() {
       rdm::HttpManager::Request rq;
       json data;
       data["username"] = ww_username.getValue();
-      data["pubkey"] = "";
+      data["pubkey"] = getGame()->getSecurityManager()->getPublicKey();
       authChallengeResponse = rdm::HttpManager::singleton()->post(
           "api/ww/v1/challenge", data.dump(), rq);
       currentStage = Authenticate2;
@@ -280,32 +394,26 @@ void WWGameState::tickWaiting() {
     case Authenticate2: {
       if (!authChallengeResponse.valid()) return;
       rdm::HttpManager::Response rs = authChallengeResponse.get();
-      if (rs.headers["Content-Type"] != "application/json") {
-        CommunicationErrorWindow* win =
-            getGame()
-                ->getGfxEngine()
-                ->getGuiManager()
-                ->getGui<CommunicationErrorWindow>();
-        win->setErrorMsg(
-            std::format("Error communicating with server. "
-                        "Error details: {}\n{}",
-                        rs.statusCode, rs.getResponse()));
-        win->open();
-        setStage(Failure);
-        for (auto& [key, value] : rs.headers) {
-          rdm::Log::printf(rdm::LOG_DEBUG, "%s=%s", key.c_str(), value.c_str());
-        }
-        break;
-      }
-
       json js = json::parse(rs.getResponse());
       if (rs.statusCode == 200) {
-        ourUuid = js["uuid"];
+        std::string challengeData = js["challenge"];
+
+        rdm::SignedMessage msg = getGame()->getSecurityManager()->sign(
+            challengeData.data(), challengeData.size());
+        std::string challengeOutput;
+        challengeOutput.resize(msg.data.size());
+        memcpy(challengeOutput.data(), msg.data.data(), msg.data.size());
 
         rdm::HttpManager::Request rq;
-        characterResponse = rdm::HttpManager::singleton()->get(
-            std::format("/api/ww/v1/{}/chara", ourUuid.c_str()), rq);
-        setStage(GetPlayerInfo);
+        json data;
+        data["challengeHashedSig"] = msg.sig;
+        data["challengeHashedKey"] = msg.key;
+        data["challengeHashedData"] = challengeOutput;
+        data["uuid"] = js["uuid"];
+
+        authChallenge2Response = rdm::HttpManager::singleton()->post(
+            "api/ww/v1/challenge2", data.dump(), rq);
+        setStage(Authenticate3);
       } else if (rs.statusCode == 400) {
         if (js["message"] == "unknown user") {
           setStage(WaitAuthenticateInfo);
@@ -315,6 +423,13 @@ void WWGameState::tickWaiting() {
                                         ->getGui<PrepareUserWindow>();
           pWin->setMsg("The server could not find anyone with that username.");
           pWin->open();
+        } else if (js["message"] == "unknown key") {
+          setStage(WaitKeyInfo);
+          rdm::HttpManager::Request rq;
+          json j;
+          j["pubkey"] = getGame()->getSecurityManager()->getPublicKey();
+          uploadKeyUuid = rdm::HttpManager::singleton()->post(
+              "/api/km/upload_key", j.dump(), rq);
         }
       } else {
         CommunicationErrorWindow* win =
@@ -330,10 +445,76 @@ void WWGameState::tickWaiting() {
         setStage(Failure);
       }
     } break;
+    case WaitKeyInfo: {
+      if (!uploadKeyUuid.valid()) return;
+      rdm::HttpManager::Response rs = uploadKeyUuid.get();
+      if (rs.statusCode == 200 || rs.statusCode == 201) {
+        json j = json::parse(rs.getResponse());
+        PrepareUserWindow* pWin = getGame()
+                                      ->getGfxEngine()
+                                      ->getGuiManager()
+                                      ->getGui<PrepareUserWindow>();
+        pWin->setMsg(
+            "Please scan the QR code, and add the key in order to "
+            "login.");
+        getGame()->getGfxEngine()->renderStepped.addClosure([this, pWin, j] {
+          pWin->showTheFuckingThing(j["id"]);
+          pWin->open();
+          setStage(WaitAuthenticateInfo);
+        });
+      } else {
+        CommunicationErrorWindow* win =
+            getGame()
+                ->getGfxEngine()
+                ->getGuiManager()
+                ->getGui<CommunicationErrorWindow>();
+        win->setErrorMsg(
+            std::format("Error communicating with server. "
+                        "Error details: {}\n{}",
+                        rs.statusCode, rs.getResponse()));
+        win->open();
+        setStage(Failure);
+      }
+    } break;
+    case Authenticate3: {
+      if (!authChallenge2Response.valid()) return;
+      rdm::HttpManager::Response rs = authChallenge2Response.get();
+      if (rs.statusCode != 200) {
+        CommunicationErrorWindow* win =
+            getGame()
+                ->getGfxEngine()
+                ->getGuiManager()
+                ->getGui<CommunicationErrorWindow>();
+        win->setErrorMsg(
+            std::format("Error communicating with server. "
+                        "Error details: {}\n{}",
+                        rs.statusCode, rs.getResponse()));
+        win->open();
+        setStage(Failure);
+      } else {
+        json r = json::parse(rs.getResponse());
+        json ud = r["data"];
+
+        ourUuid = ud["user"];
+        publicToken = ud["id"];
+        privateToken = ud["authority"];
+
+        rdm::HttpManager::Request rq;
+        characterResponse = rdm::HttpManager::singleton()->get(
+            std::format("/api/ww/v1/{}/chara", ourUuid.c_str()), rq);
+        setStage(GetPlayerInfo);
+      }
+    } break;
     case GetPlayerInfo: {
       if (!characterResponse.valid()) break;
       rdm::HttpManager::Response rs = characterResponse.get();
       if (rs.statusCode == 200) {
+        DbgProfileInfoWindow* win = getGame()
+                                        ->getGfxEngine()
+                                        ->getGuiManager()
+                                        ->getGui<DbgProfileInfoWindow>();
+        win->open();
+
         json j = json::parse(rs.getResponse());
         if (!j["character_created"]) {
           setStage(CreatePlayer);  // start making da player
@@ -387,12 +568,6 @@ void WWGameState::tickWaiting() {
     if (musicEmitter->isPlaying()) musicEmitter->stop();
   }
 }
-
-#ifndef NDEBUG
-static rdm::CVar baseurl("baseurl", "http://127.0.0.1:9898/", CVARF_SAVE);
-#else
-static rdm::CVar baseurl("baseurl", "https://endoh.ca/", CVARF_HIDDEN);
-#endif
 
 void WWGameState::figureOutWhatToDo() {
   rdm::HttpManager::Request rq;

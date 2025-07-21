@@ -5,6 +5,8 @@ rdm4001_dep = rdm4001_proj.get_variable('rdm4001_dep')
 
 compiler = meson.get_compiler('cpp')
 
+qrencode = dependency('libqrencode')
+
 b3geometry_dep = declare_dependency(link_args : ['-lBullet3Geometry', '-lBullet3Common'] ) 
 executable('wawaworld', 
 	'gstate.cpp',
@@ -24,4 +26,4 @@ executable('wawaworld',
 	'worldspawn.cpp',
 	'worldspawn.hpp',
 	'wplayer.cpp',
-	'wplayer.hpp', dependencies: [rdm4001_dep, b3geometry_dep])
+	'wplayer.hpp', dependencies: [rdm4001_dep, b3geometry_dep, qrencode])
