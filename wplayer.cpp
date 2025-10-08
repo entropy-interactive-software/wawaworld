@@ -9,7 +9,6 @@
 #include "fun.hpp"
 #include "gfx/base_types.hpp"
 #include "gfx/engine.hpp"
-#include "gfx/imgui/imgui.h"
 #include "gfx/material.hpp"
 #include "gfx/mesh.hpp"
 #include "input.hpp"
@@ -161,16 +160,6 @@ class PlayerStatusUI : public rdm::gfx::gui::NGui {
     camera.setFar(1000.f);
     camera.setPosition(eye);
     camera.setTarget(target);
-
-#ifndef NDEBUG
-    if (pstui_change_position.getBool()) {
-      ImGui::Begin("HI");
-      ImGui::SliderFloat("Eye Y", &eye.y, 0.f, 200.f);
-      ImGui::SliderFloat("Eye Z", &eye.z, 0.f, 200.f);
-      ImGui::SliderFloat("Target Z", &target.z, 0.f, 200.f);
-      ImGui::End();
-    }
-#endif
 
     void* _ = getEngine()->setViewport(playerViewport.get());
     getEngine()->getDevice()->clear(0.f, 0.f, 0.f, 0.f);
@@ -351,46 +340,6 @@ WPlayer::WPlayer(net::NetworkManager* manager, net::EntityId id)
       Worldspawn* worldspawn = dynamic_cast<Worldspawn*>(
           getManager()->findEntityByType("Worldspawn"));
 
-      if (isLocalPlayer() && cl_showpos.getBool()) {
-        ImGui::Begin("Debug");
-        if (worldspawn && worldspawn->getFile()) {
-          ImGui::Text("Cluster: %i", worldspawn->getFile()->getVisCluster());
-          ImGui::Text("Rendered Faces: %i",
-                      worldspawn->getFile()->getFacesRendered());
-          ImGui::Text("Rendered Leafs: %i",
-                      worldspawn->getFile()->getLeafsRendered());
-
-          btVector3 vel = controller->getRigidBody()->getLinearVelocity();
-          ImGui::Text("Velocity: %0.2f, %0.2f, %0.2f", vel.x(), vel.y(),
-                      vel.z());
-          ImGui::Text("Velocity Length: %0.2f (%0.2f)", vel.length(),
-                      glm::length((glm::vec2){vel.x(), vel.y()}));
-          glm::vec2 accel = controller->getWishDir();
-          ImGui::Text("Wish Dir: %0.2f, %0.2f", accel.x, accel.y);
-        } else {
-          ImGui::Text("No worldspawn found/map not loaded");
-        }
-
-        btTransform transform = controller->getTransform();
-        btVector3 origin = transform.getOrigin();
-        ImGui::Text("Position: %0.2f, %0.2f, %0.2f", origin.x(), origin.y(),
-                    origin.z());
-
-        ImGui::Separator();
-
-        network::Peer& peer = getManager()->getLocalPeer();
-        ImGui::Text("Round trip time: %i ±%ims", peer.peer->roundTripTime,
-                    peer.peer->roundTripTimeVariance);
-        ImGui::Text("Packet loss: %i ±%i", peer.peer->packetLoss,
-                    peer.peer->packetLossVariance);
-        ImGui::Text("Packets sent: %i, lost: %i", peer.peer->packetsSent,
-                    peer.peer->packetsLost);
-
-        ImGui::End();
-
-        controller->imguiDebug();
-      }
-
       // if (getManager()->getLocalPeer().peerId == remotePeerId.get()) return;
 
       if (worldspawn->getStatus() == Worldspawn::InGame) {
@@ -479,7 +428,7 @@ void WPlayer::tick() {
     }
   }
 
-  if (worldspawn && worldspawn->getFile()) {
+  if (worldspawn && worldspawn->isInWorld()) {
     if (!isLocalPlayer()) {
       if (heldWeaponRef) {
         if (firingState[0])
@@ -524,7 +473,7 @@ void WPlayer::tick() {
       soundEmitter->setPitch(
           controller->isGrounded() ? ((vel.length() < 1) ? 0.0 : 1.f) : 0.f);
 
-      if (worldspawn && worldspawn->getFile()) {
+      if (worldspawn && worldspawn->isInWorld()) {
         btVector3 origin_old = transform.getOrigin();
         btVector3 origin_new = oldTransform.getOrigin();
         // Log::printf(LOG_DEBUG, "%f, %f", forward_old.dot(forward_new),

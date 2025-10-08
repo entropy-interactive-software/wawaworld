@@ -5,12 +5,12 @@
 #include <format>
 #include <json.hpp>
 
-#include "LinearMath/btQuaternion.h"
 #include "game.hpp"
 #include "gfx/gui/ngui_elements.hpp"
 #include "gfx/gui/ngui_window.hpp"
 #include "settings.hpp"
 #include "state.hpp"
+#include "wgame.hpp"
 #include "wplayer.hpp"
 
 #ifndef NDEBUG
@@ -22,34 +22,71 @@ static rdm::CVar baseurl("baseurl", "https://endoh.ca/", CVARF_HIDDEN);
 using json = nlohmann::json;
 
 namespace ww {
+class ReactingBackgroundThing : public rdm::gfx::gui::NGui {
+  resource::Texture* failureImage;
+
+ public:
+  ReactingBackgroundThing(rdm::gfx::gui::NGuiManager* manager,
+                          rdm::gfx::Engine* engine)
+      : rdm::gfx::gui::NGui(manager, engine) {
+    failureImage = getGame()->getResourceManager()->load<resource::Texture>(
+        "rdm/gui/failure_bg.png");
+  }
+
+  virtual void render(gfx::gui::NGuiRenderer* renderer) {
+    WWGameState* wgs = (WWGameState*)getGame()->getGameState();
+    glm::vec2 res = getEngine()->getTargetResolution();
+    if (wgs->getState() != rdm::GameState::WaitForSomething) return;
+    renderer->setZIndex(0);
+    switch (wgs->getStage()) {
+      case WWGameState::Failure:
+        renderer->image(failureImage->getTexture(),
+                        (res / 2.f) - (glm::vec2(800, 600) / 2.f),
+                        glm::vec2(800, 600));
+        break;
+      default:
+        break;
+    }
+  }
+};
+NGUI_INSTANTIATOR(ReactingBackgroundThing);
+
 class CharacterCreatorWindow : public rdm::gfx::gui::NGuiWindow {
+  friend class WWGameState;
+
+  rdm::gfx::gui::TextLabel* errorLabel;
   rdm::resource::Model* playerModel;
   std::unique_ptr<rdm::resource::Model::Animator> playerAnimator;
   std::unique_ptr<rdm::gfx::Viewport> playerView;
+
+  int sign;
+  int initialClass;
 
  public:
   CharacterCreatorWindow(rdm::gfx::gui::NGuiManager* manager,
                          rdm::gfx::Engine* engine)
       : rdm::gfx::gui::NGuiWindow(manager, engine) {
+    sign = 0;
+    initialClass = 0;
+
     playerModel = getGame()->getResourceManager()->load<rdm::resource::Model>(
         PLAYERMODEL);
     playerAnimator.reset(new rdm::resource::Model::Animator());
 
     rdm::gfx::ViewportGfxSettings settings;
-    settings.resolution = glm::ivec2(300, 400);
+    settings.resolution = glm::ivec2(200, 300);
     playerView.reset(new rdm::gfx::Viewport(engine, settings));
 
     rdm::gfx::LightingManager& lm = playerView->getLightingManager();
     auto sun = lm.getSun();
     sun.ambient = glm::vec3(0.149, 0.173, 0.216);
     sun.diffuse = glm::vec3(1) - sun.ambient;
-    sun.direction = glm::vec3(-1, 1, -0.1);
     lm.setSun(sun);
 
     rdm::gfx::Camera& cam = playerView->getCamera();
     cam.setTarget(glm::vec3(0, 0, 0.25));
     cam.setFOV(80.f);
-    cam.setPosition(glm::vec3(-2, 4, 1.25));
+    cam.setPosition(glm::vec3(2, -4, 1.25));
 
     setLayout(new rdm::gfx::gui::NGuiHorizontalLayout());
 
@@ -102,20 +139,17 @@ class CharacterCreatorWindow : public rdm::gfx::gui::NGuiWindow {
     }
     panelLeft->addElement(buttonRow1);
 
-    rdm::gfx::gui::TextLabel* label0 = new rdm::gfx::gui::TextLabel(manager);
-    label0->setText(
-        "ピエール・エリオット・トルドー"
-        "（Pierre Elliott Trudeau、1919年10月18日 - 2000年9月28日）"
-        "は、カナダの政治家、第20・22代首相。姓はトリュドーとも表記される。"
-        "本名はジョセフ・フィリップ・ピエール・イヴ・エリオット・トルドー"
-        "（Joseph Philippe Pierre Yves Elliott Trudeau）。\n\n"
-        "By clicking Create you will agree to everything that will happen from "
-        "now on.");
-    label0->setAutoWrap(true);
-    label0->setTextMaxWidth(400);
-    panelLeft->addElement(label0);
+    errorLabel = new rdm::gfx::gui::TextLabel(manager);
+    errorLabel->setText(" ");
+    errorLabel->setAutoWrap(true);
+    errorLabel->setTextMaxWidth(400);
+    panelLeft->addElement(errorLabel);
     rdm::gfx::gui::Button* button0 = new rdm::gfx::gui::Button(manager);
     button0->setText("Create");
+    button0->setPressed([this] {
+      WWGameState* wg = dynamic_cast<WWGameState*>(getGame()->getGameState());
+      wg->setStage(WWGameState::UploadPlayer);
+    });
     panelLeft->addElement(button0);
     addElement(panelLeft);
 
@@ -132,6 +166,13 @@ class CharacterCreatorWindow : public rdm::gfx::gui::NGuiWindow {
   }
 
   virtual void frame() {
+    rdm::gfx::LightingManager& lm = playerView->getLightingManager();
+    auto sun = lm.getSun();
+    sun.direction =
+        glm::vec3(sinf(getEngine()->getTime()), cosf(getEngine()->getTime()),
+                  sinf(getEngine()->getTime()));
+    lm.setSun(sun);
+
     playerAnimator->initBuffer(getEngine()->getDevice());
     if (!playerAnimator->animation)
       playerAnimator->animation = playerModel->getAnimation("idle_animation");
@@ -193,13 +234,25 @@ class MotdWindow : public rdm::gfx::gui::NGuiWindow {
       : rdm::gfx::gui::NGuiWindow(manager, engine) {
     setTitle("Message of the day");
     motdLabel = new rdm::gfx::gui::TextLabel(manager);
-    motdLabel->setTextMaxWidth(300);
+    motdLabel->setTextMaxWidth(600);
     motdLabel->setAutoWrap(true);
     addElement(motdLabel);
+
+    rdm::gfx::gui::TextLabel* licenseLabel =
+        new rdm::gfx::gui::TextLabel(manager);
+    licenseLabel->setTextMaxWidth(0);
+    licenseLabel->setAutoWrap(true);
+    licenseLabel->setText(getGame()->copyright());
+    addElement(licenseLabel);
 
     rdm::gfx::gui::Button* okButton = new rdm::gfx::gui::Button(manager);
     okButton->setText("OK");
     okButton->setPressed([this] { close(); });
+
+    setHideDecorations(true);
+    setDraggable(false);
+    setCenter(true);
+
     addElement(okButton);
   }
 
@@ -229,8 +282,13 @@ class DbgProfileInfoWindow : public rdm::gfx::gui::NGuiWindow {
 
   virtual void opening() {
     WWGameState* wg = dynamic_cast<WWGameState*>(getGame()->getGameState());
-    allTheStuff->setText(std::format("UUID: {}\nUsername: {}", wg->getOurUuid(),
-                                     ww_username.getValue()));
+    allTheStuff->setText(
+        std::format("UUID: {}\n"
+                    "Username: {}\n"
+                    "Private Token: {}\n"
+                    "Public Token: {}\n",
+                    wg->getOurUuid(), ww_username.getValue(),
+                    wg->privateToken.c_str(), wg->publicToken.c_str()));
   }
 };
 
@@ -307,7 +365,7 @@ class PrepareUserWindow : public rdm::gfx::gui::NGuiWindow {
                             rdm::gfx::BaseTexture::RGB, imgBuf.data());
     qrCodeTexture->setFiltering(rdm::gfx::BaseTexture::Nearest,
                                 rdm::gfx::BaseTexture::Nearest);
-    qrCodeImage->setSize(glm::vec2(code->width * 2.f));
+    qrCodeImage->setSize(glm::vec2(code->width * 4.f));
     qrCodeImage->setTexture(qrCodeTexture.get());
     qrCodeImage->setShowa(true);
   }
@@ -325,6 +383,24 @@ WWGameState::WWGameState(rdm::Game* game) : rdm::GameState(game) {
   // stateMusic[MainMenu] = "dat5/mus/main_menu.ogg";
   currentStage = GetIndex;
   musicEmitter.reset(game->getSoundManager()->newEmitter());
+}
+
+WWGameState::~WWGameState() {
+  if (privateToken.empty()) return;
+
+  json j;
+  j["tokenAuthority"] = privateToken.c_str();
+  rdm::HttpManager::Request rq;
+  rdm::HttpManager::Response data =
+      rdm::HttpManager::singleton()
+          ->post("api/ww/v1/invalidate", j.dump(), rq)
+          .get();
+  if (data.statusCode != 200) {
+    rdm::Log::printf(rdm::LOG_ERROR, "Quit request (%i) failed: %s",
+                     data.statusCode, data.getResponse().c_str());
+  } else {
+    rdm::Log::printf(rdm::LOG_DEBUG, "Quit request success");
+  }
 }
 
 void WWGameState::renderMainMenu(rdm::gfx::Engine* engine) {
@@ -351,6 +427,7 @@ void WWGameState::tickWaiting() {
                             "Error details: {}\n{}",
                             rsp.statusCode, rsp.getResponse()));
             win->open();
+            setStage(Failure);
             break;
           }
           case 200:  // YAY
@@ -372,6 +449,7 @@ void WWGameState::tickWaiting() {
         }
       }
       break;
+
     case Authenticate: {
       if (ww_username.getValue().empty()) {
         setStage(WaitAuthenticateInfo);
@@ -391,6 +469,7 @@ void WWGameState::tickWaiting() {
           "api/ww/v1/challenge", data.dump(), rq);
       currentStage = Authenticate2;
     } break;
+
     case Authenticate2: {
       if (!authChallengeResponse.valid()) return;
       rdm::HttpManager::Response rs = authChallengeResponse.get();
@@ -445,6 +524,7 @@ void WWGameState::tickWaiting() {
         setStage(Failure);
       }
     } break;
+
     case WaitKeyInfo: {
       if (!uploadKeyUuid.valid()) return;
       rdm::HttpManager::Response rs = uploadKeyUuid.get();
@@ -476,6 +556,7 @@ void WWGameState::tickWaiting() {
         setStage(Failure);
       }
     } break;
+
     case Authenticate3: {
       if (!authChallenge2Response.valid()) return;
       rdm::HttpManager::Response rs = authChallenge2Response.get();
@@ -501,10 +582,11 @@ void WWGameState::tickWaiting() {
 
         rdm::HttpManager::Request rq;
         characterResponse = rdm::HttpManager::singleton()->get(
-            std::format("/api/ww/v1/{}/chara", ourUuid.c_str()), rq);
+            std::format("/api/ww/v1/{}/user_info", ourUuid.c_str()), rq);
         setStage(GetPlayerInfo);
       }
     } break;
+
     case GetPlayerInfo: {
       if (!characterResponse.valid()) break;
       rdm::HttpManager::Response rs = characterResponse.get();
@@ -535,6 +617,7 @@ void WWGameState::tickWaiting() {
         setStage(Failure);
       }
     } break;
+
     case CreatePlayer:
       if (!musicEmitter->isPlaying()) {
         musicEmitter->play(
@@ -557,14 +640,65 @@ void WWGameState::tickWaiting() {
           std::min(1.0f,
                    getGame()->getGfxEngine()->getTime() - beginCreateTime)));
       break;
-    case Done:
+    case UploadPlayer: {
+      CharacterCreatorWindow* cWin = getGame()
+                                         ->getGfxEngine()
+                                         ->getGuiManager()
+                                         ->getGui<CharacterCreatorWindow>();
+      cWin->close();
+
+      json j;
+      j["tokenAuthority"] = privateToken.c_str();
+      j["sign"] = cWin->sign;
+      j["initialClass"] = cWin->initialClass;
+      uploadPlayer =
+          rdm::HttpManager::singleton()->post("/api/ww/v1/put_chara", j.dump());
+      setStage(WaitPlayerResponse);
+    } break;
+    case WaitPlayerResponse: {
+      if (!uploadPlayer.valid()) break;
+      rdm::HttpManager::Response rp = uploadPlayer.get();
+      CharacterCreatorWindow* cWin = getGame()
+                                         ->getGfxEngine()
+                                         ->getGuiManager()
+                                         ->getGui<CharacterCreatorWindow>();
+      json j = json::parse(rp.getResponse());
+      if (rp.statusCode != 200) {
+        cWin->errorLabel->setText(
+            std::format("Error LOL\n{}", (std::string)j["message"]));
+        setStage(CreatePlayer);
+      } else {
+        setStage(CreatedPlayer);
+      }
+    } break;
+    case CreatedPlayer: {
+      if (!musicEmitter->isPlaying()) {
+        musicEmitter->play(
+            getGame()
+                ->getSoundManager()
+                ->getSoundCache()
+                ->get("rdm/mus/created_player.mp3", rdm::Sound::Stream)
+                .value());
+        musicEmitter->setLooping(false);
+      }
+
+    } break;
+    case Done: {
       setState(MainMenu);
+      WWAuthenticationProvider* wwAuth = (WWAuthenticationProvider*)getGame()
+                                             ->getWorld()
+                                             ->getNetworkManager()
+                                             ->getAuthenticationProvider();
+      wwAuth->setTokens(publicToken, privateToken, ourUuid);
+    } break;
+    case WaitMotd:
+      getGame()->getGfxEngine()->setClearColor(glm::vec3(0));
       break;
     default:
       break;
   }
 
-  if (currentStage != CreatePlayer) {
+  if (currentStage != CreatePlayer && currentStage != CreatedPlayer) {
     if (musicEmitter->isPlaying()) musicEmitter->stop();
   }
 }

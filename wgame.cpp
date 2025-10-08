@@ -1,6 +1,7 @@
 #include "wgame.hpp"
 
 #include <format>
+#include <json.hpp>
 
 #include "filesystem.hpp"
 #include "gfx/base_types.hpp"
@@ -21,6 +22,8 @@
 #include "world.hpp"
 #include "worldspawn.hpp"
 #include "wplayer.hpp"
+
+using json = nlohmann::json;
 
 namespace ww {
 enum UIState {
@@ -61,8 +64,8 @@ using namespace rdm;
 WGame::WGame() : Game() {
   setIcon("rdm/icon.png");
 
-  Input::singleton()->newAxis("ForwardBackward", SDLK_w, SDLK_s);
-  Input::singleton()->newAxis("LeftRight", SDLK_a, SDLK_d);
+  Input::singleton()->newAxis("ForwardBackward", SDLK_W, SDLK_S);
+  Input::singleton()->newAxis("LeftRight", SDLK_A, SDLK_D);
 
   game = new WGamePrivate();
 }
@@ -71,6 +74,108 @@ size_t WGame::getGameVersion() { return 0x00000001; }
 
 WGame::~WGame() { delete game; }
 
+WWAuthenticationProvider::WWAuthenticationProvider() {
+  CVar* cv = rdm::Settings::singleton()->getCvar("baseurl", true);
+  rdm::HttpManager::singleton()->setBaseUrl(cv->getValue());
+}
+
+void WWAuthenticationProvider::clientTokenReceived(
+    network::Peer* peer, network::BitStream stream,
+    rdm::HttpManager::Response& response) {}
+
+void WWAuthenticationProvider::sendPeerInfo(network::Peer* peer,
+                                            network::BitStream& stream) {
+  rdm::HttpManager::Request rq;
+  network::NetworkManager* manager = getManager();
+  std::string ourUuid = uuid;
+  std::string ourPublicToken = publicToken;
+  /*rq.requestFinished = [this, peer,
+                        stream](rdm::HttpManager::Response& response) {
+    if (response.statusCode == 200) {
+      json j = json::parse(response.getResponse());
+      network::BitStream outstream;
+      outstream.writeStream(stream);
+      outstream.writeString(response.getResponse());
+      getManager()->sendPacket(peer, outstream)
+    } else {
+      Log::printf(LOG_ERROR, "WWAuthenticationProvider error %s",
+                  response.getResponse().c_str());
+    }
+    };*/
+  json ct;
+  ct["tokenAuthority"] = privateToken;
+  auto rsp = rdm::HttpManager::singleton()
+                 ->post("api/ww/v1/open_client_ticket", ct.dump(), rq)
+                 .get();
+  if (rsp.statusCode != 200) {
+    Log::printf(LOG_ERROR, "Unable to open a client ticket %i, response: %s",
+                rsp.statusCode, rsp.getResponse().c_str());
+    stream.write<bool>(false);
+
+    getManager()->sendPacket(peer, stream);
+    return;
+  }
+  stream.write<bool>(true);
+  json jrsp = json::parse(rsp.getResponse());
+  stream.writeString((std::string)(jrsp["clientTicket"]));
+  stream.writeString(publicToken);
+  getManager()->sendPacket(peer, stream);
+}
+
+std::future<bool> WWAuthenticationProvider::verifyPeerInfo(
+    network::Peer* peer, network::BitStream stream) {
+  std::promise<bool> promise;
+
+  bool verified = stream.read<bool>();
+  if (!verified) {
+    if (peer->address.host == 0x7f000001) {
+      Log::printf(LOG_DEBUG,
+                  "Allowed local client to connect, because they're cool! :D");
+      promise.set_value(true);
+      return promise.get_future();
+    } else {
+      Log::printf(LOG_DEBUG,
+                  "Denied client, because they said they couldn't get a ticket "
+                  "from the server");
+      promise.set_value(false);
+      return promise.get_future();
+    }
+  }
+
+  json ct;
+  ct["tokenAuthority"] = privateToken;
+  auto rsp = rdm::HttpManager::singleton()
+                 ->post("api/ww/v1/verify_client_ticket", ct.dump())
+                 .get();
+  return promise.get_future();
+}
+
+void WWAuthenticationProvider::serverSetup() {
+  rdm::HttpManager::Response mainrsp =
+      rdm::HttpManager::singleton()->get("api/ww/v1/main").get();
+  try {
+    json maindt = json::parse(mainrsp.getResponse());
+    if (!maindt["motd"].empty()) {
+      Log::printf(LOG_INFO, "MOTD: %s", ((std::string)maindt["motd"]).c_str());
+    }
+
+    json data;
+    data["username"] =
+        rdm::Settings::singleton()->getCvar("ww_global_username")->getValue();
+    data["pubkey"] =
+        getManager()->getGame()->getSecurityManager()->getPublicKey();
+
+    rdm::HttpManager::Response authenticate1 =
+        rdm::HttpManager::singleton()
+            ->post("api/ww/v1/challenge", data.dump())
+            .get();
+  } catch (std::exception& e) {
+    Log::printf(LOG_ERROR, "Failed setup %s", e.what());
+  }
+}
+
+void WWAuthenticationProvider::serverDestroy() {}
+
 void WGame::addEntityConstructors(network::NetworkManager* manager) {
   manager->setPassword("RDMEXRDMEXRDMEX");
   manager->registerConstructor<Worldspawn>("Worldspawn");
@@ -78,15 +183,16 @@ void WGame::addEntityConstructors(network::NetworkManager* manager) {
   manager->registerConstructor<WeaponSniper>("WeaponSniper");
   manager->registerConstructor<WeaponMagnum>("WeaponMagnum");
   manager->setPlayerType("WPlayer");
+  manager->setAuthenticationProvider(new WWAuthenticationProvider());
 }
 
 static CVar ip("ip", "", CVARF_CONSOLE_ARGUMENT);
 static CVar port("port", "7938", CVARF_CONSOLE_ARGUMENT);
 
 void WGame::initializeClient() {
-  addEntityConstructors(getWorld()->getNetworkManager());
-
   startGameState(GameStateConstructor<WWGameState>);
+
+  addEntityConstructors(getWorld()->getNetworkManager());
 
   getGfxEngine()->getMaterialCache()->addDataFile(
       "rdm/materials/materials.json");
@@ -129,131 +235,15 @@ void WGame::initializeClient() {
     network::Peer::Type peerType =
         world->getNetworkManager()->getLocalPeer().type;
 
-    /*if (worldServer) {
-      ImGui::Begin("Server");
-      ImGui::Text("Currently hosting");
-      ImGui::End();
-    }
-
-    ImGui::Begin("Scheduler");
-    ImGui::Text("Client");
-    world->getScheduler()->imguiDebug();
-    if (worldServer) {
-      ImGui::Separator();
-      ImGui::Text("Server");
-      worldServer->getScheduler()->imguiDebug();
-    }
-    ImGui::End();*/
-
     if (peerType == network::Peer::ConnectedPlayer) {
       if (game->worldspawn) {
         if (game->worldspawn->getFile())
           game->worldspawn->getFile()->updatePosition(
               gfxEngine->getCamera().getPosition());
-
-        /*
-        glm::ivec2 size = gfxEngine->getContext()->getBufferSize();
-        ImGui::SetNextWindowSize(ImVec2(size.x, size.y));
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::Begin("HUD", NULL,
-                     ImGuiWindowFlags_NoBackground |
-                         ImGuiWindowFlags_NoDecoration |
-                         ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-                         ImGui::End();*/
       } else {
-        ImGui::Begin("Connecting to server...");
-        ImGui::Text("Waiting for worldspawn");
-        ImGui::End();
       }
     } else {
       Input::singleton()->setMouseLocked(false);
-      if (peerType == network::Peer::Undifferentiated) {
-        ImGui::Begin("Connecting to server...");
-        ImGui::Text("Establishing connection...");
-        ImGui::End();
-      } else {
-        /*
-        ImGui::Begin("RDM4001 License");
-        ImGui::Text("%s", copyright());
-        ImGui::End();
-
-        switch (game->state) {
-          case MainMenu: {
-            glm::ivec2 size = gfxEngine->getContext()->getBufferSize();
-            ImGui::SetNextWindowSize(ImVec2(size.x, size.y));
-            ImGui::SetNextWindowPos(ImVec2(0, 0));
-          }
-            ImGui::Begin("Welcome to RDM", NULL,
-                         ImGuiWindowFlags_NoBackground |
-                             ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-            {
-              gfx::BaseTexture* logo = gfxEngine->getTextureCache()
-                                           ->getOrLoad2d("dat5/logo.png")
-                                           .value()
-                                           .second;
-              ImGui::Image(logo->getImTextureId(), ImVec2(540, 451), {0, 1},
-                           {1, 0});
-            }
-
-            if (ImGui::Button("Connect to Game")) {
-              game->state = ConnectPanel;
-            }
-            if (ImGui::Button("Host")) {
-              game->state = HostPanel;
-            }
-            if (ImGui::Button("Quit")) {
-              InputObject quitObject;
-              quitObject.type = InputObject::Quit;
-              Input::singleton()->postEvent(quitObject);
-            }
-
-            ImGui::Text("RDM %08x, Engine %08x", getGameVersion(),
-                        getVersion());
-            ImGui::End();
-            break;
-          case ConnectPanel:
-            ImGui::Begin("Connect to Server");
-            {
-              static char ip[64] = "127.0.0.1";
-              static int port = 7938;
-              ImGui::InputText("IP", ip, sizeof(ip));
-              ImGui::InputInt("Port", &port);
-              if (ImGui::Button("Connect")) {
-                world->getNetworkManager()->connect(ip, port);
-                game->state = MainMenu;
-              }
-              if (ImGui::Button("Cancel")) {
-                game->state = MainMenu;
-              }
-            }
-            ImGui::End();
-            break;
-          case HostPanel:
-            ImGui::Begin("Host a Server");
-            {
-              ImGui::InputInt("Port", &hostParams->port);
-              ImGui::InputText("Map", hostParams->map, 64);
-              ImGui::Text(
-                  "You can enter dedicated server mode by using the -D "
-                  "(--hintDs) argument");
-              if (ImGui::Button("Start")) {
-                lateInitServer();
-                world->getNetworkManager()->connect("127.0.0.1", 7938);
-              }
-              if (ImGui::Button("Cancel")) {
-                game->state = MainMenu;
-              }
-            }
-            ImGui::End();
-            break;
-          default:
-            break;
-        }
-        */
-      }
     }
   });
 

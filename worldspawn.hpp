@@ -20,6 +20,7 @@ class Worldspawn : public net::Entity {
   float roundStartTime;
   std::unique_ptr<rdm::SoundEmitter> emitter;
   std::vector<glm::vec3> mapSpawnLocations;
+  bool inWorld;
   int nextSpawnLocation;
 
   std::string mapPath(std::string name);
@@ -53,6 +54,8 @@ class Worldspawn : public net::Entity {
 
   bool isPendingAddToGfx() { return pendingAddToGfx; }
   void loadFile(const char* file);  // call on backend
+
+  bool isInWorld() { return inWorld; };
 
   BSPFile* getFile() { return file; }
 

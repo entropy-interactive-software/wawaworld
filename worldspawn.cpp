@@ -10,6 +10,7 @@
 #include "map.hpp"
 #include "network/bitstream.hpp"
 #include "physics.hpp"
+#include "planetmap.hpp"
 #include "putil/fpscontroller.hpp"
 #include "settings.hpp"
 #include "world.hpp"
@@ -184,7 +185,8 @@ void Worldspawn::setStatus(Status s) {
       roundStartTime = getManager()->getDistributedTime() + 1.0;
       break;
     case InGame:
-      loadFile(mapName.c_str());
+      // loadFile(mapName.c_str());
+      planet = new PlanetMap(getGame(), getWorld(), NULL);
       break;
     case RoundEnded:
       destroyFile();
@@ -275,7 +277,12 @@ void Worldspawn::serialize(net::BitStream& stream) {
   stream.write<Status>(currentStatus);
   switch (currentStatus) {
     case InGame:
-      stream.writeString(mapName);
+      if (file) {
+        stream.write<bool>(true);
+        stream.writeString(mapName);
+      } else {
+        stream.write<bool>(false);
+      }
       break;
     case RoundEnding:
     case RoundBeginning:
@@ -307,25 +314,33 @@ void Worldspawn::deserialize(net::BitStream& stream) {
 
   gameMode = stream.read<GameMode>();
   currentStatus = stream.read<Status>();
+  if (currentStatus != InGame) inWorld = false;
+
   switch (currentStatus) {
     case InGame: {
-      std::string newMap = stream.readString();
-      if (!newMap.empty() && mapName != newMap) {
-        mapName = newMap;
-        file = new BSPFile(getWorld(), mapPath(mapName).c_str());
-        getWorld()->getPhysicsWorld()->physicsStepping.addClosure([this] {
-          std::scoped_lock lock(mutex);
-          file->addToPhysicsWorld(getWorld()->getPhysicsWorld());
-        });
+      bool isBsp = stream.read<bool>();
+      if (isBsp) {
+        std::string newMap = stream.readString();
+        if (!newMap.empty() && mapName != newMap) {
+          mapName = newMap;
+          file = new BSPFile(getWorld(), mapPath(mapName).c_str());
+          getWorld()->getPhysicsWorld()->physicsStepping.addClosure([this] {
+            std::scoped_lock lock(mutex);
+            file->addToPhysicsWorld(getWorld()->getPhysicsWorld());
+          });
 
-        getGfxEngine()->renderStepped.addClosure([this] {
-          std::scoped_lock lock(mutex);
-          file->initGfx(getGfxEngine());
-          entity = getGfxEngine()->addEntity<MapEntity>(file);
-        });
+          getGfxEngine()->renderStepped.addClosure([this] {
+            std::scoped_lock lock(mutex);
+            file->initGfx(getGfxEngine());
+            entity = getGfxEngine()->addEntity<MapEntity>(file);
+          });
 
-        pendingAddToGfx = true;
+          pendingAddToGfx = true;
+        }
+      } else {
+        planet = new PlanetMap(getGame(), getWorld(), getGfxEngine());
       }
+      inWorld = true;
     } break;
     case RoundEnding:
     case RoundBeginning:

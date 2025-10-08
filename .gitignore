@@ -12,3 +12,4 @@ docs
 compile_commands.json
 .cache
 .exclude
+subprojects/.wraplock

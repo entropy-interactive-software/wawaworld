@@ -68,17 +68,20 @@ BSPFile::BSPFile(World* world, const char* bsp) {
       for (std::string extension : extensions) {
         std::string txpath =
             std::string("rdm/baseq3/") + bsp_texture.name + extension;
-        auto t = world->getGame()->getResourceManager()->load(
-            BaseResource::Texture, txpath.c_str());
-        if (t) {
+        if (world->getGame()->getResourceManager()->getResourceAvailable(
+                txpath.c_str())) {
+          auto t =
+              world->getGame()->getResourceManager()->load<resource::Texture>(
+                  txpath.c_str());
           texture = dynamic_cast<resource::Texture*>(t);
           break;
         }
       }
       if (texture == 0) {
         Log::printf(LOG_WARN, "Could not find texture %s", bsp_texture.name);
-        auto t = world->getGame()->getResourceManager()->load(
-            BaseResource::Texture, RESOURCE_MISSING_TEXTURE);
+        auto t =
+            world->getGame()->getResourceManager()->load<resource::Texture>(
+                RESOURCE_MISSING_TEXTURE);
         if (t)
           texture = dynamic_cast<resource::Texture*>(t);
         else
@@ -304,11 +307,10 @@ BSPFaceModel BSPFile::addFaceModel(BSPFace* face) {
       if (textures.find(texture.name) != textures.end())
         m.m_texture = textures[texture.name];
       else
-        m.m_texture =
-            ((resource::Texture*)engine->getWorld()
-                 ->getGame()
-                 ->getResourceManager()
-                 ->load(BaseResource::Texture, RESOURCE_MISSING_TEXTURE));
+        m.m_texture = ((resource::Texture*)engine->getWorld()
+                           ->getGame()
+                           ->getResourceManager()
+                           ->load<resource::Texture>(RESOURCE_MISSING_TEXTURE));
     }
   } catch (std::exception& e) {
     m.m_texture = 0;
@@ -409,9 +411,9 @@ void BSPFile::draw() {
   gfx::BaseProgram* sky =
       engine->getMaterialCache()->getOrLoad("BspSky").value()->prepareDevice(
           engine->getDevice(), 0);
-  sky->setParameter("skybox", gfx::DtSampler,
-                    gfx::BaseProgram::Parameter{.texture.slot = 0,
-                                                .texture.texture = m_skybox});
+  sky->setParameter(
+      "skybox", gfx::DtSampler,
+      gfx::BaseProgram::Parameter{.texture = {.slot = 0, .texture = m_skybox}});
   gfx::RenderListSettings skySettings;
   skySettings.cull = rdm::gfx::BaseDevice::BackCCW;
   skySettings.state = rdm::gfx::BaseDevice::DepthStencilState::Disabled;

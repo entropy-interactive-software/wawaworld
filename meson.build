@@ -1,4 +1,4 @@
-project('freeblock', 'c', 'cpp', default_options: ['cpp_std=c++20'])
+project('wawaworld', 'c', 'cpp', default_options: ['cpp_std=c++20'])
 
 rdm4001_proj = subproject('rdm4001')
 rdm4001_dep = rdm4001_proj.get_variable('rdm4001_dep')
@@ -21,6 +21,8 @@ executable('wawaworld',
 	'weapons/sniper.cpp',
 	'weapons/sniper.hpp',
 
+        'planetmap.cpp',
+        'planetmap.hpp',
 	'wgame.cpp',
 	'wgame.hpp',
 	'worldspawn.cpp',
